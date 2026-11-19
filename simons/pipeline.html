@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生成流程 · Simons · TSFM</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fill: #f6f6f7;
+    --fill-2: #fafafa;
+    --stroke: #e3e3e6;
+    --stroke-2: #c9c9cf;
+    --text: #1a1a1c;
+    --text-2: #56565e;
+    --text-3: #8a8a93;
+    --text-4: #a8a8b0;
+    --accent: #2f6feb;
+    --radius: 6px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a1a;
+      --fill: #232324;
+      --fill-2: #1f1f20;
+      --stroke: #333335;
+      --stroke-2: #4a4a4e;
+      --text: #ededf0;
+      --text-2: #a8a8b0;
+      --text-3: #808089;
+      --text-4: #66666e;
+      --accent: #6ea0ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+    font-size: 14px; line-height: 20px;
+  }
+  main { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 24px; line-height: 30px; font-weight: 590; margin: 0 0 6px; }
+  h2 { font-size: 18px; line-height: 24px; font-weight: 590; margin: 28px 0 10px; }
+  p { margin: 0 0 8px; }
+  code {
+    font-family: var(--mono); font-size: 0.92em;
+    background: var(--fill); border: 1px solid var(--stroke);
+    border-radius: 4px; padding: 0 4px;
+  }
+  .sub { color: var(--text-2); margin-bottom: 16px; }
+  .small { font-size: 12px; line-height: 16px; }
+  .t2 { color: var(--text-2); }
+  .t3 { color: var(--text-3); }
+  .t4 { color: var(--text-4); }
+
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab {
+    font: inherit; font-size: 12px; padding: 4px 12px; border-radius: 9999px;
+    border: 1px solid var(--stroke); background: transparent;
+    color: var(--text-2); cursor: pointer;
+  }
+  .tab:hover { border-color: var(--stroke-2); color: var(--text); }
+  .tab[aria-selected="true"] {
+    background: var(--fill); border-color: var(--stroke-2);
+    color: var(--text); font-weight: 600;
+  }
+
+  .card { border: 1px solid var(--stroke); border-radius: 8px; background: var(--bg); }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 6px 12px; border-bottom: 1px solid var(--stroke);
+    font-size: 12px; color: var(--text-2);
+  }
+  .card-header .cfg {
+    font-family: var(--mono); font-size: 11px; background: var(--fill);
+    border-radius: 9999px; padding: 2px 8px; color: var(--text-3); white-space: nowrap;
+  }
+  .card-body { padding: 16px; }
+  .card + .card { margin-top: 16px; }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 158px) 1fr; gap: 16px; align-items: start; }
+  .stage-title { font-weight: 600; }
+  .src { font-family: var(--mono); font-size: 11px; color: var(--text-4); margin-top: 2px; word-break: break-all; }
+  .boxes { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+  .box {
+    flex: 1 1 0; min-width: 150px; position: relative;
+    padding: 8px 10px; border-radius: var(--radius);
+    border: 1px solid var(--stroke); background: var(--fill);
+  }
+  .box.accent { border-color: var(--accent); }
+  .box .label { font-size: 12px; font-weight: 600; }
+  .box .sub { font-size: 12px; line-height: 16px; color: var(--text-3); margin: 0; }
+  .box.stacked::before {
+    content: ""; position: absolute; inset: 4px -3px -4px 3px; z-index: -1;
+    border: 1px solid var(--stroke); border-radius: var(--radius);
+  }
+  .caption { font-size: 12px; line-height: 16px; color: var(--text-3); margin-top: 6px; }
+  .connector { position: relative; height: 20px; }
+  .connector::before {
+    content: ""; position: absolute; left: 79px; top: 0; bottom: 5px;
+    border-left: 1px solid var(--stroke-2); opacity: 0.6;
+  }
+  .connector::after {
+    content: ""; position: absolute; left: 76px; bottom: 0;
+    border: 4px solid transparent; border-top-color: var(--stroke-2); opacity: 0.6;
+  }
+
+  table { width: 100%; border-collapse: collapse; border: 1px solid var(--stroke); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 7px 10px; font-size: 13px; vertical-align: top;
+           border-bottom: 1px solid var(--stroke); }
+  th { font-weight: 600; color: var(--text-2); font-size: 12px; background: var(--fill-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--fill-2); }
+  td.center { text-align: center; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  figure { margin: 12px 0 0; }
+  figure img { width: 100%; border: 1px solid var(--stroke); border-radius: 8px; background: #fff; }
+  figcaption { font-size: 12px; line-height: 16px; color: var(--text-3); margin-top: 6px; }
+
+  .callout {
+    margin-top: 20px; padding: 12px 14px; border-radius: 8px;
+    border: 1px solid var(--stroke); background: var(--fill-2);
+  }
+  .callout .title { font-weight: 600; margin-bottom: 4px; }
+  hr { border: none; border-top: 1px solid var(--stroke); margin: 24px 0; }
+  @media (max-width: 720px) {
+    .stage { grid-template-columns: 1fr; gap: 6px; }
+    .connector::before { left: 11px; }
+    .connector::after { left: 8px; }
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .site-nav {
+    position: sticky; top: 0; z-index: 20;
+    margin: -24px -24px 24px; padding: 10px 24px;
+    background: var(--bg); border-bottom: 1px solid var(--stroke);
+  }
+  .nav-inner { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+  .brand a { color: var(--text); }
+  .brand .sep { color: var(--text-4); font-weight: 400; }
+  .nav-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .nav-btn, .btn {
+    display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+    font-size: 13px; line-height: 18px; padding: 5px 12px; border-radius: 9999px;
+    border: 1px solid var(--stroke); background: transparent; color: var(--text-2);
+  }
+  .nav-btn:hover, .btn:hover { text-decoration: none; border-color: var(--stroke-2); color: var(--text); }
+  .nav-btn[aria-current="page"] { background: var(--fill); border-color: var(--stroke-2); color: var(--text); font-weight: 600; }
+  .nav-btn.ext { margin-left: auto; }
+  .btn { border-color: var(--stroke-2); color: var(--text); }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .btn.primary:hover { color: var(--bg); filter: brightness(1.08); }
+
+  .pager { display: flex; gap: 12px; margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--stroke); }
+  .pager a {
+    display: flex; flex-direction: column; gap: 2px; min-width: 180px;
+    padding: 10px 14px; border: 1px solid var(--stroke); border-radius: 8px; color: var(--text);
+  }
+  .pager a:hover { text-decoration: none; border-color: var(--accent); }
+  .pager a .small { color: var(--text-4); }
+  .pager .next { margin-left: auto; text-align: right; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .panel { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--stroke); border-radius: 8px; }
+  .panel h3 { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; }
+  .panel p { margin: 0; color: var(--text-2); }
+  .panel .actions { margin-top: auto; padding-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .panel-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pill { font-family: var(--mono); font-size: 11px; background: var(--fill); border-radius: 9999px; padding: 2px 8px; color: var(--text-3); white-space: nowrap; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tags span { font-size: 12px; line-height: 16px; padding: 2px 8px; border-radius: 4px; background: var(--fill); color: var(--text-2); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 16px 0 4px; }
+  .stat { padding: 10px 12px; border: 1px solid var(--stroke); border-radius: 8px; background: var(--fill-2); }
+  .stat .num { font-size: 22px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .what { font-size: 12px; line-height: 16px; color: var(--text-3); }
+  .qa + .qa { margin-top: 0; }
+  .qa .q { font-weight: 600; margin-bottom: 6px; }
+  .qa .actions { margin-top: 12px; }
+
+  .doc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
+  .toc { position: sticky; top: 72px; max-height: calc(100vh - 96px); overflow: auto; font-size: 12px; line-height: 18px; }
+  .toc .toc-title { font-weight: 600; color: var(--text-2); padding: 0 8px 6px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc li ol { padding-left: 12px; }
+  .toc a { display: block; padding: 3px 8px; border-radius: 4px; color: var(--text-3); }
+  .toc a:hover { text-decoration: none; background: var(--fill); color: var(--text); }
+  .toc a.active { background: var(--fill); color: var(--text); font-weight: 600; }
+  .prose { line-height: 22px; min-width: 0; }
+  .prose h2 { margin: 36px 0 12px; scroll-margin-top: 72px; }
+  .prose h3 { font-size: 15px; line-height: 22px; font-weight: 600; margin: 24px 0 8px; scroll-margin-top: 72px; }
+  .prose p, .prose ul, .prose ol { margin: 0 0 10px; }
+  .prose ul, .prose ol { padding-left: 22px; }
+  .prose li { margin: 3px 0; }
+  .prose strong { font-weight: 600; }
+  .prose pre { margin: 8px 0 12px; padding: 10px 12px; background: var(--fill); border: 1px solid var(--stroke); border-radius: 8px; overflow-x: auto; }
+  .prose pre code { border: none; padding: 0; background: none; font-size: 12px; line-height: 18px; }
+  .prose .table-wrap { overflow-x: auto; margin: 8px 0 14px; }
+  .prose figure { margin: 12px 0 16px; }
+  .prose blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--stroke-2); color: var(--text-2); }
+  @media (max-width: 960px) {
+    .doc { grid-template-columns: 1fr; gap: 16px; }
+    .toc { position: static; max-height: none; border: 1px solid var(--stroke); border-radius: 8px; padding: 8px; }
+    .toc li ol { display: none; }
+  }
+  @media (max-width: 720px) {
+    .nav-btn.ext { margin-left: 0; }
+    .pager a { min-width: 0; flex: 1; }
+  }
+</style>
+</head>
+<body>
+<header class="site-nav"><div class="nav-inner">
+  <div class="brand"><a href="../index.html">TSFM</a><span class="sep">/</span><a href="index.html">Simons</a></div>
+  <nav class="nav-btns" aria-label="Simons"><a class="nav-btn" href="index.html">总览</a><a class="nav-btn" href="guide.html">数据生成指南</a><a class="nav-btn" href="pipeline.html" aria-current="page">生成流程</a><a class="nav-btn" href="training.html">训练阶段</a></nav>
+  <a class="nav-btn ext" href="https://github.com/Abel-ai-lab/Simons" target="_blank" rel="noopener">GitHub ↗</a>
+</div></header>
+<main>
+  <h1>Simons 合成数据流水线</h1>
+  <p class="sub">合成数据在训练进程里<strong>现生成、现使用</strong>：18 个单变量族按权重批量生成并做一轮增强，池里一半的行再耦合成共享 series ID 的多变量组，叠加观测效应后替换 batch 的最后若干行。没有离线数据集，没有拒绝采样，也没有时间戳。原理与参数的完整说明见<a href="guide.html">数据生成指南</a>，四个训练阶段各自怎么用见<a href="training.html">训练阶段</a>。</p>
+
+  <h2>先理清四个词</h2>
+  <p class="t2">它们在代码和配置里都出现，指的是不同层级的东西。</p>
+  <table>
+    <thead><tr><th>词</th><th>是什么</th><th>谁决定</th><th>数量</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>行</strong>（row）</td>
+        <td>batch 的一行，32 个槽，每槽一条序列</td>
+        <td><code>WIDTH = MAX_VARIATES = 32</code></td>
+        <td>阶段 1/2：每步 36 / 48 / 84 行；阶段 3/4：打包后行数的 40%</td>
+      </tr>
+      <tr>
+        <td><strong>组</strong>（group）</td>
+        <td>一行里共享同一 series ID 的若干槽，模型眼里的「一个多变量序列」；变量注意力只在组内</td>
+        <td><code>multi._group_sizes</code></td>
+        <td>耦合行平均约 5.5 组（实测）；不耦合行 32 组，每组 1 槽</td>
+      </tr>
+      <tr>
+        <td><strong>族</strong>（family）</td>
+        <td>单变量的生成方法</td>
+        <td><code>base.family_makers</code></td>
+        <td>18 个，分 6 大类</td>
+      </tr>
+      <tr>
+        <td><strong>机制</strong>（mechanism）</td>
+        <td>组内序列之间依赖的构造方法</td>
+        <td><code>multi.MECHANISMS</code></td>
+        <td>6 种，每组均匀抽 1 种</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="caption">配置文件的阶段编号和 <code>stage</code> 字段不是一回事：阶段 1、2 的 <code>stage</code> 都是 <code>stage1</code>（纯合成），阶段 3、4 是 <code>stage2</code>（真实数据 + 40% 合成）。本页的「阶段 N」一律指配置文件编号。</p>
+
+  <h2>两层流程</h2>
+  <p class="t2"><strong>建池</strong>是一次性的：一次 <code>MultiPool.build</code> 生成够用 <code>6 × world</code>（阶段 3/4 是 <code>2 × world</code>）步的全部合成序列。<strong>每一步</strong>从池里顺序取行、替换进 batch、打包、算 loss，池用完就整池重建，序列不复用。</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-id="gen" aria-selected="true">建池：单变量 → 多变量 → 观测</button>
+    <button class="tab" role="tab" data-id="use" aria-selected="false">每一步：进 batch → 进 loss</button>
+  </div>
+
+  <div class="card" id="pane-gen">
+    <div class="card-header">
+      <span>建一个池：一批 <code>[N, L]</code> 序列 + series ID + 角色元数据</span>
+      <span class="cfg">synth/base.py · synth/multi.py · covariates/roles.py</span>
+    </div>
+    <div class="card-body">
+      <p class="t2">01–03 是单变量部分，耦合行与不耦合行共用；04–05 只作用于耦合行；06–07 作用于整个池。全部在 GPU 上批量完成（机理族的轨迹库除外，它是缓存的）。</p>
+
+      <div class="stage">
+        <div><div class="small t4">01</div><div class="stage-title">族配额</div><div class="src">base.draw</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">确定性拆分</div><div class="sub">每族 <code>int(n·w/Σw)</code> 条，余数给列表第一个族</div></div>
+            <div class="box"><div class="label">一次 draw 供全池</div><div class="sub">不耦合行 + 成员自身序列 + driver 底料，共 <code>extra + n + n/4</code> 条</div></div>
+            <div class="box"><div class="label">统一长度 full</div><div class="sub"><code>fft_length(L + 256)</code>：阶段 1/2 是 8960，阶段 3/4 是 4900</div></div>
+          </div>
+          <div class="caption">配额不是逐条抽签，所以每个池里各族的条数几乎正好等于权重比例。多出来的 256 步是<strong>滞后预热</strong>，耦合完会裁掉，保证 τ 最大到 256 时被保留的每一步都有真实的过去。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">02</div><div class="stage-title">族生成</div><div class="src">base / nonstat / causal<br>heavy / mech / calendar</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">统计 / 谱 · 2</div><div class="sub"><code>kernel</code> <code>sarima</code></div></div>
+            <div class="box"><div class="label">非平稳 · 3</div><div class="sub"><code>sde</code> <code>step</code> <code>spike</code></div></div>
+            <div class="box"><div class="label">结构 / 因果 · 4</div><div class="sub"><code>cauker</code> <code>rhythm</code> <code>wave</code> <code>fpfn</code></div></div>
+            <div class="box"><div class="label">重尾 / 间歇 · 3</div><div class="sub"><code>levy</code> <code>ets</code> <code>pulse</code></div></div>
+            <div class="box accent"><div class="label">机理 · 5</div><div class="sub"><code>chaos</code> <code>epi</code> <code>hydro</code> <code>thermal</code> 走轨迹库；<code>queue</code> 现算</div></div>
+            <div class="box"><div class="label">日历 · 1</div><div class="sub"><code>calendar</code></div></div>
+          </div>
+          <div class="caption">拼接后整体 <code>randperm</code>、NaN 置 0、逐行 z-score，<strong>单位一律推迟到 06</strong>。机理库每进程缓存 16384（chaos）/ 8192 条长 9216 的轨迹，每被调用 400 次整库重算；取样时随机挑轨迹与通道、步长 1–4、随机起点。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">03</div><div class="stage-title">单变量增强</div><div class="src">augment.apply</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">40% 的行</div><div class="sub">70% 做 1 类、30% 做 2 类，按权重 Gumbel top-k 不放回</div></div>
+            <div class="box"><div class="label">mix 0.35</div><div class="sub">与另外 1–2 条混合，权重 Dirichlet(1.5)，50% 随时间切换</div></div>
+            <div class="box"><div class="label">season 0.25</div><div class="sub">乘周末方波或 1–4 周期的慢正弦</div></div>
+            <div class="box"><div class="label">filter 0.2</div><div class="sub">2–32 抽头 FIR；15% 差分、15% 累加</div></div>
+            <div class="box"><div class="label">lattice 0.2</div><div class="sub">60% 量化、40% 下限截断</div></div>
+          </div>
+          <div class="caption">这是耦合前<strong>唯一</strong>的处理：没有按质量的拒绝采样，也没有按特征的筛选。因为它在 <code>draw</code> 里，耦合成员的自身序列与 driver 底料也都被增强过；<code>mix</code> 还会跨族混合。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">04</div><div class="stage-title">分组与连边</div><div class="src">multi.plan</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">一半的行耦合</div><div class="sub"><code>synthetic_multi_fraction = 0.5</code>，与不耦合行随机交错</div></div>
+            <div class="box"><div class="label">组大小</div><div class="sub"><code>int(LogU(2, 17))</code>，上限 16，最后一组可能只剩 1</div></div>
+            <div class="box"><div class="label">机制 6 选 1</div><div class="sub">均匀；单槽组强制 identity</div></div>
+            <div class="box accent"><div class="label">观测到的根</div><div class="sub">lag、event、50% 的 func：前几个成员就是 driver 本身，ρ∈U(0.85, 1)</div></div>
+          </div>
+          <div class="caption">每组最多两条 driver（潜在的共同原因），每个成员最多 3 条入边，父节点可以是 driver 或组内另一个成员。根让「领先指标」本身出现在组里，阶段 2 起它们以 0.8 的概率被设为已知未来的协变量。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">05</div><div class="stage-title">频域耦合</div><div class="src">multi.couple</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">driver</div><div class="sub">族序列 / 随机游走 / 稀疏冲击 / 周期脉冲</div></div>
+            <div class="box"><div class="label">边响应</div><div class="sub"><code>c · e^{−iωτ} · (1−r)/(1−r·e^{−iω})</code>，在 2·full 网格上做线性卷积</div></div>
+            <div class="box"><div class="label">ρ 混合</div><div class="sub"><code>√ρ · std(f(Σ 边)) + √(1−ρ) · own</code></div></div>
+            <div class="box accent"><div class="label">两遍 combine</div><div class="sub">链最多两跳，第二遍让链式成员读到父的最终输出</div></div>
+          </div>
+          <div class="caption">耦合完裁掉前面的预热段、只留最后 <code>L</code> 步再 z-score。<strong>组内成员天然等长、天然对齐</strong>：所有底料来自同一次 <code>draw</code> 的同一网格，所以合成侧没有「原始序列长度不一致」的问题，观测长度的差异由 06 事后模拟。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">06</div><div class="stage-title">观测效应</div><div class="src">base.post<br>observe.py</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box accent"><div class="label">组内共享</div><div class="sub">时间翻转 25%；左截断 40%，观测长度 LogU(96, L)</div></div>
+            <div class="box"><div class="label">噪声器 30%</div><div class="sub">Poisson 计数 / 过度离散计数 / 乘性冲击 / 1% 尖峰</div></div>
+            <div class="box"><div class="label">duty 10%</div><div class="sub">仅阶段 1/2；Markov 或周期开关</div></div>
+            <div class="box"><div class="label">随机单位</div><div class="sub">25% 取反；30% 正值化，否则偏移 U(−3, 3)；×LogU(0.01, 1e4)</div></div>
+            <div class="box"><div class="label">空洞 10%</div><div class="sub">长 1–32 步；最后 32 步永远有观测</div></div>
+          </div>
+          <div class="caption">共享靠 <code>post(..., group=group)</code>：每个随机量按组号索引，所以同组成员时间方向一致、观测起点一致（实测 94.9% 的多成员组首个观测步完全相同，其余是空洞恰好落在截断边界上）。计数行保持原始整数，跳过取反、偏移和缩放。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">07</div><div class="stage-title">协变量角色</div><div class="src">roles.RolePlanner<br>.plan_pool</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">组比例</div><div class="sub">阶段 2 按进度 0.1 → 0.2 → 0.4；阶段 3/4 固定 0.4</div></div>
+            <div class="box"><div class="label">谁当协变量</div><div class="sub">lag / event / 带根的 func：根以 0.8；其他：比例 U(0.2, 0.5)</div></div>
+            <div class="box"><div class="label">目标末端遮挡</div><div class="sub">50% 的角色组隐藏目标最后 1–16 个 patch</div></div>
+            <div class="box accent"><div class="label">翻转组不给角色</div><div class="sub"><code>meta * (~flip)</code>：翻转后因果方向反了</div></div>
+          </div>
+          <div class="caption">输出 <code>[N, 3]</code> 元数据：是否协变量、末端遮挡 patch 数、未来截断步（15% 的协变量在 [0.75L, L) 之后为 NaN）。阶段 1 没有这一步。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="pane-use">
+    <div class="card-header">
+      <span>每一步：batch → 合成行 → 打包 → loss</span>
+      <span class="cfg">training/trainer.py · objective.py · packing.py</span>
+    </div>
+    <div class="card-body">
+      <p class="t2">阶段 1/2 的 batch 由全 NaN 的空行组成，合成池把它们全部填满；阶段 3/4 先把 784 个真实窗口打包成行，再把最后 40% 的行整行换成合成行。</p>
+
+      <div class="stage">
+        <div><div class="small t4">01</div><div class="stage-title">真实行先处理</div><div class="src">RealAugmenter<br>power_warp</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">只作用于前面的行</div><div class="sub"><code>rows − 合成行数</code>，在合成池填入之前</div></div>
+            <div class="box"><div class="label">真实增强</div><div class="sub">mixup / 截断 / 幅度包络 / 取反 / 时间翻转，<code>power_warp</code> 0.2</div></div>
+          </div>
+          <div class="caption">真实窗口的降采样、拉伸、跨段拼接在 <code>Windows</code> 取窗时就做完了。<strong>合成行不经过任何一项真实数据增强</strong>。阶段 1/2 没有这一步。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">02</div><div class="stage-title">替换行</div><div class="src">SyntheticMixer<br>.__call__ / .take</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">最后 round(f·rows) 行</div><div class="sub">从池里顺序取，用完整池重建</div></div>
+            <div class="box"><div class="label">阶段 1/2：f = 1</div><div class="sub">每行 8704 步（8192 历史 + 512 未来）</div></div>
+            <div class="box accent"><div class="label">阶段 3/4：f = 0.4，只填近区</div><div class="sub">最后 4608 步；远区设为 NaN，first patch 加远区偏移</div></div>
+          </div>
+          <div class="caption">被覆盖的行里原有的真实窗口直接丢弃，数据计划已按 <code>1 − share</code> 预算过。25M / 60M 的阶段 3 前 2005 / 600 步把占比从 1.0 线性降到 0.4：合成行数不变，丢掉部分真实行。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">03</div><div class="stage-title">角色处理</div><div class="src">roles.Hook.prepare</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">效应行（阶段 2）</div><div class="sub">按进度 0.01 → 0.02 → 0.04 的行比例替换最前面的行</div></div>
+            <div class="box"><div class="label">部分未来</div><div class="sub">截断点之后的协变量值设为 NaN</div></div>
+            <div class="box accent"><div class="label">已知未来编码</div><div class="sub">协变量行左移一个 patch；二值行缩放到 [0, 1]</div></div>
+          </div>
+          <div class="caption">左移一个 patch 后，目标 token i（预测 patch i+1）能读到协变量 patch i+1 的值，这就是「已知未来」。效应行的 ID 从 <code>50_000_000</code> 起，与合成组的 <code>1_000_000 + 组号</code> 区分。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">04</div><div class="stage-title">打包</div><div class="src">packing.plan</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">同 ID = 一个窗口</div><div class="sub">段掩码隔离不同窗口</div></div>
+            <div class="box"><div class="label">跳过前导 NaN</div><div class="sub">读 mixer 记下的每槽首个观测 patch</div></div>
+            <div class="box"><div class="label">288 token / 行</div><div class="sub">远区开启的阶段；左截断的短窗口可以拼在一起</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">05</div><div class="stage-title">遮挡与目标</div><div class="src">objective.packed_loss</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">CPM</div><div class="sub">每行遮挡率 U(0, 0.4)、段长 1–8 个 patch；输入变 NaN、目标保留</div></div>
+            <div class="box"><div class="label">角色组末端</div><div class="sub">目标最后 1–16 个 patch 遮挡；协变量从不遮挡</div></div>
+            <div class="box"><div class="label">起点约束</div><div class="sub">看到首个观测 patch 之后才有目标；至少 2 个观测 patch 之后才遮挡</div></div>
+          </div>
+          <div class="caption">合成数据<strong>没有单独的任务定义</strong>，与真实数据走同一个目标。遮挡段之后的位置等价于多步预测：CPM 单段最长 8 个 patch（相邻段可以连成更长的空洞），角色组的末端遮挡最长 16 个 patch，即整个 512 步的预测长度。</div>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="stage">
+        <div><div class="small t4">06</div><div class="stage-title">loss</div><div class="src">objective.pinball_parts<br>covariates/stream.py</div></div>
+        <div>
+          <div class="boxes">
+            <div class="box"><div class="label">9 个分位数</div><div class="sub">0.1–0.9，在每个近区 patch 位置预测下一个 patch</div></div>
+            <div class="box"><div class="label">asinh 尺度</div><div class="sub">先按因果滑窗 loc / std（窗口 8192）归一化</div></div>
+            <div class="box"><div class="label">协变量 pass</div><div class="sub">阶段 3/4 另加一项，权重 0.025；阶段 4 再加 long pass</div></div>
+          </div>
+          <div class="caption">协变量行不带目标，只有目标行进 loss。远区 token 不带目标。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <h2>18 个族与各自的权重</h2>
+  <p class="t2">权重来自 <code>synthetic_family_weights</code>，各列已归一化到 100%。60M 与 297M 的阶段 1–2 与 178M 相同；25M 去掉了 <code>calendar</code>，其余权重是 178M 的 1/0.65 倍。</p>
+  <table>
+    <thead><tr><th>大类</th><th>族</th><th>方法一句话</th><th>178M / 60M / 297M<br>阶段 1–2</th><th>25M<br>阶段 1–2</th><th>阶段 3–4</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="2">统计 / 谱</td><td><code>kernel</code></td><td>KernelSynth：周期 / GP / 白噪声 / 线性分量的加乘组合</td><td class="num">13.7%</td><td class="num">21.1%</td><td class="num">28%</td></tr>
+      <tr><td><code>sarima</code></td><td>频域稳定 SARMA，积分、季节积分、慢包络</td><td class="num">13.7%</td><td class="num">21.1%</td><td class="num">28%</td></tr>
+      <tr><td rowspan="3">非平稳</td><td><code>sde</code></td><td>两状态切换 OU，时变均值与波动</td><td class="num">7.8%</td><td class="num">12.0%</td><td class="num">12%</td></tr>
+      <tr><td><code>step</code></td><td>变点、阶梯、平台</td><td class="num">3.6%</td><td class="num">5.5%</td><td class="num">6%</td></tr>
+      <tr><td><code>spike</code></td><td>脉冲串、锯齿、异常尖峰</td><td class="num">3.6%</td><td class="num">5.5%</td><td class="num">6%</td></tr>
+      <tr><td rowspan="4">结构 / 因果</td><td><code>cauker</code></td><td>随机 DAG 上的非线性组合</td><td class="num">5.2%</td><td class="num">8.0%</td><td class="num">8%</td></tr>
+      <tr><td><code>rhythm</code></td><td>多层节律、丢拍、衰减包络</td><td class="num">2.6%</td><td class="num">4.0%</td><td class="num">4%</td></tr>
+      <tr><td><code>wave</code></td><td>AM/FM 的正弦 / 方波 / 三角 / 锯齿</td><td class="num">2.0%</td><td class="num">3.0%</td><td class="num">4%</td></tr>
+      <tr><td><code>fpfn</code></td><td>正趋势 × 季节 × Weibull 噪声</td><td class="num">2.0%</td><td class="num">3.0%</td><td class="num">4%</td></tr>
+      <tr><td rowspan="3">重尾 / 间歇</td><td><code>ets</code></td><td>新息 ETS，阻尼趋势、双季节</td><td class="num">4.4%</td><td class="num">6.8%</td><td class="num">—</td></tr>
+      <tr><td><code>levy</code></td><td>t 新息、GARCH、跳跃</td><td class="num">1.0%</td><td class="num">1.5%</td><td class="num">—</td></tr>
+      <tr><td><code>pulse</code></td><td>间歇发生 × 重尾量，水库与库存</td><td class="num">1.0%</td><td class="num">1.5%</td><td class="num">—</td></tr>
+      <tr><td rowspan="5">机理</td><td><code>chaos</code></td><td>29 个混沌 / 受迫 ODE，40% 斜积耦合</td><td class="num">1.6%</td><td class="num">2.4%</td><td class="num">—</td></tr>
+      <tr><td><code>epi</code></td><td>随机 SEIR / SIR + 报告过程</td><td class="num">0.9%</td><td class="num">1.4%</td><td class="num">—</td></tr>
+      <tr><td><code>queue</code></td><td>Poisson 到达、Lindley 积压</td><td class="num">0.9%</td><td class="num">1.4%</td><td class="num">—</td></tr>
+      <tr><td><code>hydro</code></td><td>降雨-径流、积雪、地下水</td><td class="num">0.6%</td><td class="num">0.9%</td><td class="num">—</td></tr>
+      <tr><td><code>thermal</code></td><td>两节点 RC 热模型 + 温控</td><td class="num">0.6%</td><td class="num">0.9%</td><td class="num">—</td></tr>
+      <tr><td>日历</td><td><code>calendar</code></td><td>每天步数 + 星期 / 年相位 + 节假日 + 日内曲线</td><td class="num">35%</td><td class="num">—</td><td class="num">—</td></tr>
+    </tbody>
+  </table>
+  <figure>
+    <img src="assets/families.png" alt="每个族的一个样本">
+    <figcaption>每个族一条样本：<code>draw(1, 1536, families=(族,))</code>，不做增强也不做 <code>post</code>。颜色对应大类。</figcaption>
+  </figure>
+
+  <h2>六种耦合机制</h2>
+  <table>
+    <thead><tr><th>机制</th><th>driver</th><th>边</th><th>延迟 τ</th><th>平滑 decay</th><th>ρ</th><th>根</th></tr></thead>
+    <tbody>
+      <tr><td><code>identity</code></td><td>—</td><td>无</td><td>—</td><td>—</td><td>0</td><td>—</td></tr>
+      <tr><td><code>mix</code></td><td>1–2 条族序列</td><td>连全部 driver，系数 N(0, 1)</td><td>0</td><td>无</td><td>U(0.3, 0.95)</td><td>无</td></tr>
+      <tr><td><code>lag</code></td><td>1–2 条族序列</td><td>40% 连组内另一成员（链式），30% 再加第二条边</td><td>LogU(4, 256)</td><td>60% 无，否则 LogU(1, 48)</td><td>U(0.4, 0.95)</td><td>有（全部 driver）</td></tr>
+      <tr><td><code>coint</code></td><td>1–2 条随机游走（0.6）/ 漂移游走（0.4）</td><td>连全部 driver，系数 ±U(0.5, 2)；自身是 OU 噪声</td><td>70% 为 0，否则 LogU(1, 64)</td><td>无</td><td>U(0.6, 0.97)</td><td>无</td></tr>
+      <tr><td><code>func</code></td><td>1 条族序列</td><td>系数 1，再过 tanh / softplus / abs / clip / 量化 / hinge</td><td>40% 为 0，否则 LogU(4, 256)</td><td>70% 无，否则 LogU(1, 32)</td><td>U(0.5, 0.95)</td><td>50%</td></tr>
+      <tr><td><code>event</code></td><td>1 条稀疏冲击（0.6）/ 周期脉冲（0.4）</td><td>1 条边，30% 两条，系数 ±U(0.5, 2)</td><td>80% LogU(1, 128)，否则 0</td><td>LogU(1, 100)，总有</td><td>U(0.3, 0.9)</td><td>有</td></tr>
+    </tbody>
+  </table>
+  <p class="caption">实测各机制占组数 16%–19%（identity 略多，因为单槽组被强制为 identity）；lag 非根成员的 τ 中位数 32 步，四分位 11 / 90，上限 256。identity 组是故意的：模型要见到「同组但无关」的情况。</p>
+  <figure>
+    <img src="assets/mechanisms.png" alt="每种机制的一个耦合组">
+    <figcaption>每种机制一个组（<code>couple</code> 的输出，<code>post</code> 之前）。为了让依赖肉眼可见，挑的是 ρ 较高的组；灰线是根序列按边的 τ 平移后的样子。训练里 ρ 低到 0.3 的组很多，依赖并不总是显眼。</figcaption>
+  </figure>
+
+  <h2>观测效应：哪些在组内共享</h2>
+  <table>
+    <thead><tr><th>顺序</th><th>效应</th><th>概率与参数</th><th>组内</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>时间翻转</td><td>25%</td><td><strong>共享</strong></td></tr>
+      <tr><td class="num">2</td><td>噪声器</td><td>30%：Poisson 计数（率 LogU(0.05, 50) × 归一化值）/ 过度离散计数 / 乘性对数正态 / 1% 尖峰 ×U(3, 10)，四选一</td><td>逐条</td></tr>
+      <tr><td class="num">3</td><td>duty 开关</td><td>阶段 1/2：非计数行的 10%；Markov（平均段长 LogU(4, 512)）或周期开关各半</td><td>逐条</td></tr>
+      <tr><td class="num">4</td><td>随机单位</td><td>25% 取反；30% 平移到最小值 0，否则 +U(−3, 3)；×LogU(0.01, 1e4)；计数行跳过</td><td>逐条</td></tr>
+      <tr><td class="num">5</td><td>左截断</td><td>40%，观测长度 LogU(96, L)</td><td><strong>共享</strong></td></tr>
+      <tr><td class="num">6</td><td>空洞</td><td>10% 的行，起始率 LogU(0.001, 0.02)，长 1–32；最后 32 步保留</td><td>逐条</td></tr>
+    </tbody>
+  </table>
+  <figure>
+    <img src="assets/observation.png" alt="一个耦合组经过 post">
+    <figcaption>一个 lag 组经过 <code>post</code>：同组共用灰色的截断区，但量级各自不同。为了看清，这里把截断概率设为 1、空洞概率设为 0.6；训练用的是 0.4 和 0.1。</figcaption>
+  </figure>
+
+  <h2>时间轴、起始时间与频率</h2>
+  <table>
+    <thead><tr><th>问题</th><th>答案</th></tr></thead>
+    <tbody>
+      <tr><td>合成序列带时间戳或 <code>freq</code> 吗</td><td><strong>不带</strong>。池里只有 <code>[N, L]</code> 的数值、series ID 和角色元数据。</td></tr>
+      <tr><td>模型输入有时间特征吗</td><td><strong>没有</strong>。token 只有 asinh 缩放后的值与观测标志；位置编码的周期由 <code>periodicity.detect_periods</code> 在数值上用 FFT 检测。</td></tr>
+      <tr><td>频率从哪来</td><td>隐式的：<code>PERIOD_BANK</code> 的 24 / 168 / 48 / 96 / 288 / 7 / 365 / 52 / 12 等分别对应小时、30 分钟、15 分钟、5 分钟、日、周、月数据的自然周期；60% 的周期从库里取，40% 取 LogU(2, 700)。</td></tr>
+      <tr><td>有显式抽采样频率的生成器吗</td><td>有，但只用于生成形状：<code>calendar</code>（每天 12 / 24 / 48 / 96 / 144 / 288 / 1 步）、<code>season</code> 增强、<code>epi</code>（日 / 周）、<code>hydro</code>（小时 / 日）、<code>thermal</code>（15 分钟 / 小时）、<code>queue</code>（每天 288 / 96 / 24）、效应族 <code>energy</code> 与 <code>classical</code>（<code>freq_label</code> + <code>Cal</code>）。</td></tr>
+      <tr><td>起始时间怎么定</td><td>随机相位：日内偏移、星期相位 0–6、年内相位 U(0, 365.25)、<code>t0</code> ∈ [0, 1e6) 等，各族各自抽。同组成员的自身序列各抽各的相位，组内没有共同日历。</td></tr>
+      <tr><td>真实数据呢</td><td>随机窗口起点（随机起始时间）、降采样 40% 与拉伸 25%（频率增强）、时间翻转 10%。语料的 <code>freq</code> 只在协变量 pass 里用来挑预测长度（<code>horizon_for</code>）。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <div class="title">七条容易踩的不变量</div>
+    <p style="margin:0">
+      ① <strong>同源</strong>：不耦合行的单变量序列、耦合成员的自身序列、driver 底料来自同一次 <code>draw</code>，族、权重、增强完全相同。<br>
+      ② <strong>增强在耦合前，观测在耦合后</strong>：前者改变形状，后者改变「被看到的方式」。<br>
+      ③ <strong>翻转与左截断组内共享</strong>，噪声、duty、单位、空洞逐条独立。<br>
+      ④ <strong>最后 32 步永远有观测</strong>：空洞不会落在最后一个 patch 上。<br>
+      ⑤ <strong>计数行保持整数</strong>：不取反、不平移、不缩放，<code>observe</code> 也跳过它们。<br>
+      ⑥ <strong>翻转组没有协变量角色</strong>：翻转后领先指标变成了滞后指标。<br>
+      ⑦ <strong>合成行不经过任何真实数据增强</strong>：<code>RealAugmenter</code> 与 <code>power_warp</code> 只作用于前 <code>rows − 合成行数</code> 行。
+    </p>
+  </div>
+
+  <h2>设计上的取舍</h2>
+  <table>
+    <thead><tr><th>决定</th><th>代码里的依据</th></tr></thead>
+    <tbody>
+      <tr><td>在线生成，不落盘</td><td><code>SyntheticMixer</code> 的 docstring：「Replace the last round(fraction * rows) batch rows from a reusable synthetic-series pool」。池在设备上生成，用完重建，不需要存储，也不会重复。</td></tr>
+      <tr><td>耦合放在频域、长度取 7-smooth</td><td><code>fft_length</code>：「for efficient cuFFT grids」；<code>couple</code>：「Reuse bases round-robin to keep pool shapes fixed for FFT-plan reuse」。一次 FFT 同时完成任意延迟、指数平滑和多父求和。</td></tr>
+      <tr><td>两遍 combine</td><td>注释「A second pass lets chain followers read their parents' outputs」。链最多两跳，所以两遍正好精确。</td></tr>
+      <tr><td>观测效应放在耦合之后、按组共享</td><td><code>post</code> 的 docstring：「<code>group</code> [n] shares flips/padding」。组内时间方向与观测起点必须一致，组内依赖才不被破坏。</td></tr>
+      <tr><td>翻转组不分配角色</td><td>注释「Time-flipped groups reverse causality, so they receive no covariate roles」。</td></tr>
+      <tr><td>阶段 3/4 合成行只填近区</td><td>配置注释「Synthetic rows: 40% of the packed rows, near region only」，代码没有写原因。从代价看，32768 步上下文的远区有 28672 步，填满整行的生成量约是只填近区的 7 倍。</td></tr>
+    </tbody>
+  </table>
+
+  <p class="small t4" style="margin-top:12px">
+    来源：<code>src/simons/synth/</code>（<code>base.py</code> / <code>augment.py</code> / <code>observe.py</code> /
+    <code>multi.py</code> / <code>nonstat.py</code> / <code>causal.py</code> / <code>heavy.py</code> / <code>mech.py</code> /
+    <code>calendar.py</code> / <code>covariates/</code>）、<code>src/simons/training/</code>（<code>trainer.py</code> /
+    <code>schedule.py</code> / <code>objective.py</code> / <code>covariates/roles.py</code>）与 <code>configs/*.yaml</code>。
+    「实测」数字来自 CPU 上的 <code>plan</code> / <code>MultiPool.build</code> 抽样，命令见<a href="guide.html#s9">数据生成指南第 9 节</a>；
+    图由 <a href="assets/make_figures.py"><code>make_figures.py</code></a> 生成。强调色描边标出该阶段最容易被误解的点。
+  </p>
+<nav class="pager"><a href="guide.html"><span class="small">← 上一页</span><span>数据生成指南</span></a><a class="next" href="training.html"><span class="small">下一页 →</span><span>训练阶段</span></a></nav>
+</main>
+
+<script>
+// 两个 pane 默认都在 DOM 里且可见，禁用 JS 时整页仍可读；有 JS 时才切成标签页。
+const PANES = { gen: document.getElementById("pane-gen"), use: document.getElementById("pane-use") };
+function select(id) {
+  for (const [key, pane] of Object.entries(PANES)) pane.style.display = key === id ? "" : "none";
+  for (const btn of document.querySelectorAll(".tab")) {
+    btn.setAttribute("aria-selected", String(btn.dataset.id === id));
+  }
+}
+for (const btn of document.querySelectorAll(".tab")) {
+  btn.addEventListener("click", () => select(btn.dataset.id));
+}
+select("gen");
+</script>
+</body>
+</html>
